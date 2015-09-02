@@ -8,17 +8,20 @@ import getopt
 import datetime
 import time
 
+#parse and validate the command line arguments
 def parse_parameters(argv):
 
-	today = time.strftime("%Y-%m-%d")
+	#get the current date and the first date of APOD image
+	today = time.strptime(time.strftime('%Y-%m-%d'), '%Y-%m-%d')
+	first_date = time.strptime('1995-06-16', '%Y-%m-%d')
 
 	path = ''
 	date = today
 	key = 'DEMO_KEY'
-	background = False
 
+	#parse tge args
 	try:
-		opts, args = getopt.getopt(argv[1:], "p:d:k:h", ["path=", "date=", "key=", "background"])
+		opts, args = getopt.getopt(argv[1:], 'p:d:k:h', ['path=', 'date=', 'key='])
 
 	except getopt.GetoptError as err:
 		usage()
@@ -37,10 +40,12 @@ def parse_parameters(argv):
 
 			try:
 
+				#verify the date format and range
 				datetime.datetime.strptime(date, '%Y-%m-%d')
+				date = time.strptime(date, '%Y-%m-%d')
 
-				if not date <= today:
-					print 'Date out of range'
+				if date > today or date < first_date:
+					print 'Date out of range [1995-06-16 - today]'
 					sys.exit(2)
 
 			except ValueError:
@@ -53,28 +58,36 @@ def parse_parameters(argv):
 		elif o == '-h':
 			usage()
 
-		elif o == '--background':
-			background = True
-
 		else:
 			usage()
 
 	if len(opts) == 0: usage()
 
-	return {'path': path, 'date': date, 'key' : key, 'background' : background}
+	return {'path': path, 'date': date, 'key' : key}
 
 
 def usage():
-	print "how to use"
-	sys.exit(1)
+
+	print """<script>.py [options]
+    -d, --date= the date of the Astronomy Picture (YYYY-MM-DD)
+    -h show this help
+    -k, --key = the key of NASA APOD API
+    -p, --path= the image destination path"""
+
+	sys.exit(2)
 
 
 def get_image(args):
-	
-	api_url = 'https://api.nasa.gov/planetary/apod?api_key=' + args['key'] + '&date=' + args['date'] + '&format=JSON'
 
+	formated_date = time.strftime('%Y-%m-%d', args['date'])
+	
+	#create the API url
+	api_url = 'https://api.nasa.gov/planetary/apod?api_key=' + args['key'] + '&date=' + formated_date + '&format=JSON'
+
+	#get the json with metadata of the image
 	response = urllib.urlopen(api_url)		
 
+	#get the image URL
 	image_url = json.loads(response.read())['url']
 
 	file_extension = os.path.splitext(image_url)[1]
@@ -83,38 +96,27 @@ def get_image(args):
 	if path and path[-1] != '/':
 		path = path + '/'
 
+	#try to create the dir (if it not exists)
 	if(path and not os.path.isdir(path)):
 
 		try:
 			os.mkdir(path)
 
+		#permission denied
 		except OSError:
 			print 'Permission denied. Please run: sudo <script>.py [options]'
 			sys.exit(2)
 
+	#save the image on the selected destination
 	try:
-		urllib.urlretrieve(image_url, path + args['date'] + file_extension)
-		return path + args['date'] + file_extension
+		urllib.urlretrieve(image_url, path + formated_date + file_extension)
 
 	except IOError:
 		print 'Permission denied. Please run: sudo <script>.py [options]'
 		sys.exit(2)	
 
-def change_background(image):
-
-	path = os.path.abspath(image)
-
-	com = 'gsettings set org.gnome.desktop.background picture-uri \"file://' + path + '\"'
-	com = com.encode('utf-8')
-
-	os.system(com)
-
 if __name__ == "__main__":
 
     args = parse_parameters(sys.argv)
     
-    image = get_image(args)
-
-    if(args['background']): 
-    	change_background(image)
-    
+    get_image(args)
